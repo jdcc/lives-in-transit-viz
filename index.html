@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="google-spreadsheet.js"></script>
+        <script src="jquery-1.9.1.js"></script>
+        <script src="d3.v3.min.js"></script>
+        <link href='http://fonts.googleapis.com/css?family=Noto+Sans' rel='stylesheet' type='text/css'>
+        <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+        <style>
+            html {
+                background-color: #DDD;
+            }
+            body {
+                font-family: "Noto Sans";
+                width: 1000px;
+                background-color: white;
+                border: 1px solid #999;
+                margin: 15px auto;
+                box-shadow: 0 0 5px 0px #999;
+                padding: 10px;
+                font-size: 14px;
+            }
+            #subjects {
+                width: 470px;
+                white-space: nowrap;
+                overflow-x: hidden;
+                text-overflow: ellipsis;
+                float: left;
+                margin-right: 50px;
+                list-style-type: none;
+                padding-left: 0;
+            }
+            #subjects input[type=checkbox] {
+                margin-right: 10px;
+            }
+            #chart {
+                width: 475px;
+                float: left;
+                position: relative;
+            }
+            .bar-wrap {
+                display: inline-block;
+                margin-right: 20px;
+                width: 400px;
+                height: 10px;
+                background:
+                    radial-gradient(#D5D5D5 17%, transparent 8%) 1px 1px,
+                    radial-gradient(#D5D5D5 17%, transparent 8%) 4px 4px;
+                    background-color:#E5E5E5;
+                    background-size:6px 6px;
+            }
+            .bar {
+                height: 10px;
+                width: 0;
+            }
+            .req {
+                margin-bottom: 5px;
+            }
+            .req .label {
+                font-style: italic;
+                font-size: 0.8em;
+                line-height: 0.8em;
+            }
+            #checked {
+                font-size: 3em;
+                text-align: center;
+            }
+            #line {
+                position: absolute;
+                width: 0px;
+                height: 100%;
+                border: 1px dashed red;
+                left: 400px;
+                border-width: 0 1px 0 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="checked"><span id="many-checked">0</span> of 10</div>
+        <ul id="subjects">
+        </ul>
+        <div id="chart">
+            <div id="line"></div>
+        </div>
+        <script>
+            var dataUrl = "https://docs.google.com/spreadsheet/pub?key=&single=true&gid=0&output=html",
+                requirementsUrl = "https://docs.google.com/spreadsheet/pub?key=&single=true&gid=1&output=html"
+                dataSpreadsheet = new GoogleSpreadsheet(),
+                requirementsSpreadsheet = new GoogleSpreadsheet(),
+                requirementColor = d3.scale.category20();
+
+            requirementsSpreadsheet.url(requirementsUrl);
+            requirementsSpreadsheet.load(function(requirementsResult) {
+                var rRows = requirementsResult.data.rows,
+                    rHeaders = requirementsResult.data.headers;
+
+                var req = d3.select('#chart').selectAll('.req').data(rRows)
+                .enter().append('div').attr('class', 'req').attr('data-requirement', function(r) { return encodeURI(r[0]); });
+
+                req.append('div').attr('class', 'label').text(function(r) { return r[2] + ' - ' + r[0]; });
+                req.append('div').attr('class', 'bar-wrap').append('div').attr('class', 'bar').attr('data-max', function(r) { return r[1]; }).attr('data-current', 0).style('background-color', function(r) { return requirementColor(r[0]); });
+                req.append('span').attr('class', 'count').html(function(r) { return '<span class="current">0</span> of ' + r[1]; });
+
+                dataSpreadsheet.url(dataUrl);
+                dataSpreadsheet.load(function(dataResult) {
+                    var rows = dataResult.data.rows,
+                        headers = dataResult.data.headers;
+
+                    var data = rows.map(function(r) { return [r[0], r[9]]; });
+
+                    d3.select('#subjects').selectAll('li').data(data)
+                    .enter().append('li').html(function(d, i) { return '<input type="checkbox" value="' + i + '" id="check-' + i + '" /><label for="check-' + i + '">(' + d[1] + ') - ' + d[0] + '</label>'; });
+
+                    d3.selectAll('input[type=checkbox]').on('click', function() {
+                        var checked = d3.select(this).property('checked');
+                        if (checked) {
+                            d3.select('#many-checked').text(function() { return parseInt(d3.select(this).text()) + 1; });
+                            var row = rows[parseInt(d3.select(this).attr('value'))];
+                            row.forEach(function(value) {
+                                var req = d3.select('[data-requirement="' + encodeURI(value) + '"]');
+                                if (!req.empty()) {
+                                    var scale = d3.scale.linear().domain([0, req.select('.bar').attr('data-max')]).range([0, 400]);
+                                    var bar = req.select('.bar'),
+                                        newCurrent = parseInt(bar.attr('data-current')) + 1;
+                                    bar.attr('data-current', newCurrent).style('width', function() { return Math.min(410, scale(newCurrent)) + 'px'; });
+                                    req.select('.count .current').text(newCurrent);
+                                }
+                            });
+                        } else {
+                            d3.select('#many-checked').text(function() { return parseInt(d3.select(this).text()) - 1; });
+                            var row = rows[parseInt(d3.select(this).attr('value'))];
+                            row.forEach(function(value) {
+                                var req = d3.select('[data-requirement="' + encodeURI(value) + '"]');
+                                if (!req.empty()) {
+                                    var scale = d3.scale.linear().domain([0, req.select('.bar').attr('data-max')]).range([0, 400]);
+                                    var bar = req.select('.bar'),
+                                        newCurrent = parseInt(bar.attr('data-current')) - 1;
+                                    bar.attr('data-current', newCurrent).style('width', function() { return Math.min(410, scale(newCurrent)) + 'px'; });
+                                    req.select('.count .current').text(newCurrent);
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+
+
+            function column(header, headers, rows) {
+                return rows.map(function(row) { return row[headers.indexOf(header)] });
+            }
+
+            function valueToRequirement(value, requirementHeaders) {
+
+            }
+        </script>
+        <div style="clear: both;"></div>
+    </body>
+</html>
+
